@@ -1,0 +1,13 @@
+## Interface: 120005, 120007
+## Title: AchievementRarity
+## Notes: Achievement rarity data by the Wizzleworks — an embeddable LibStub library: the share of accounts that hold each achievement (US / EU / global), plus optional house tier bands. Install alongside a consumer addon to keep its rarity data fresh.
+## Author: the Wizzleworks
+## Version: 2026.06.28
+## X-License: MIT
+## X-Website: https://github.com/wizzleworks-gg/achievement-rarity
+## IconTexture: Interface\Icons\Achievement_quests_completed_08
+## DefaultState: enabled
+
+Libs\LibStub\LibStub.lua
+AchievementRarity-1.0\AchievementRarity-Data-1.0.lua
+AchievementRarity-1.0\AchievementRarity-1.0.lua
