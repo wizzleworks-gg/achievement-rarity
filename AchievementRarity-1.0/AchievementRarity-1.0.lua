@@ -76,8 +76,9 @@ function lib:GetData()
 end
 
 -- Snapshot metadata: the as-of date, the per-region active-account denominators, the
--- player's home region, and this data's `minor` (the freshness version). A fresh table each
--- call so consumers can't mutate ours.
+-- player's home region, this data's `minor` (the freshness version), and the rank floor
+-- (the system-launch date the rank-at-earn metric measures from, nil if this data file
+-- predates rank support). A fresh table each call so consumers can't mutate ours.
 function lib:GetMeta()
     return {
         asOf = self.asOf,
@@ -88,7 +89,77 @@ function lib:GetMeta()
         },
         region = self.region,
         minor = self.minor,
+        rankFloor = self.rankFloor,
     }
+end
+
+--[[ Rank-at-earn — raw layer, no house opinion. ]]
+
+-- Your standing among an achievement's holders by earn date: "you were in the first N% to
+-- earn this". The data file ships, per achievement per scope, a small array of day-offsets
+-- (from lib.rankFloor) marking the date by which each lib.rankLadder percentile of current
+-- holders had earned it; this interpolates the player's own earn date against them. Reads
+-- only the player's recorded earn date, so it's retroactive — it works for achievements
+-- earned long before this addon was installed, with no client-side stamp.
+
+-- lib.rankFloor parsed to epoch seconds, memoised per-lib. The achievement system's launch
+-- date (patch 3.0.2); the game back-credits old account-wide earns to it, so an earn date
+-- at or below it is unreliable and the rank is suppressed. `false` once we've found the
+-- field absent/unparseable, so we don't re-parse every call.
+local function floorTime(self)
+    local t = self._rankFloorTime
+    if t == nil then
+        local y, m, d = (self.rankFloor or ""):match("(%d+)-(%d+)-(%d+)")
+        t = y and time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) }) or false
+        self._rankFloorTime = t
+    end
+    return t or nil
+end
+
+-- The player's percentile (0–100) among an achievement's holders by earn date under a scope,
+-- or nil when: the achievement is off-snapshot, the scope has no breakpoints (too few holders
+-- for a stable curve, or a data file without rank support), or the earn date is at/below the
+-- unreliable floor (suppressed). earnTime is the earn date as epoch seconds (os.time-style).
+-- Output is continuous — interpolated between the ladder breakpoints — so "first 3%" is
+-- meaningful, not just the ladder values. The caller decides display (e.g. "<1%" under 1%).
+function lib:RankAtEarn(achievementID, earnTime, scope)
+    local entry = self.ranks and self.ranks[achievementID]
+    if not entry then
+        return nil
+    end
+    local offs = entry[REGION_INDEX[scopeRegion(scope)]]
+    if not offs or #offs == 0 then
+        return nil
+    end
+    local floor = floorTime(self)
+    if not floor then
+        return nil
+    end
+    -- Day-offset of the earn date from the floor (rounded; the curve is week-granular, so a
+    -- sub-day DST wobble is immaterial). At/below the floor → unreliable date → suppress.
+    local days = math.floor((earnTime - floor) / 86400 + 0.5)
+    if days <= 0 then
+        return nil
+    end
+    local ladder = self.rankLadder
+    local n = #offs
+    if days <= offs[1] then
+        return ladder[1]              -- earlier than the earliest recorded holder
+    elseif days >= offs[n] then
+        return ladder[n]              -- later than the last recorded holder
+    end
+    for i = 1, n - 1 do
+        local hi = offs[i + 1]
+        if days <= hi then
+            local lo = offs[i]
+            local pLo, pHi = ladder[i], ladder[i + 1]
+            if hi == lo then
+                return pHi             -- a flat step (tied dates); take the higher percentile
+            end
+            return pLo + (pHi - pLo) * (days - lo) / (hi - lo)
+        end
+    end
+    return ladder[n]
 end
 
 --[[ Opinion layer — house style, optional and overridable. ]]
