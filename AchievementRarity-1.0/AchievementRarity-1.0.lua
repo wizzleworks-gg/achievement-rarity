@@ -24,6 +24,18 @@ assert(LibStub, "AchievementRarity-1.0 requires LibStub")
 local lib = LibStub:GetLibrary("AchievementRarity-1.0", true)
 if not lib then return end -- the data file registers the library; nothing to attach to without it
 
+-- Freshest-API-wins, the read-API analogue of the data file's freshest-snapshot-wins.
+-- LibStub arbitrates the DATA half by snapshot minor, but this static half attaches via
+-- GetLibrary unconditionally — so when several consumers embed DIFFERENT API versions,
+-- whichever static file loads last would otherwise clobber a newer one (a mixed-version
+-- API). Gate on our own API minor, orthogonal to the snapshot minor: a client ends up
+-- with the newest data AND the newest API, each arbitrated independently. Bump API_MINOR
+-- on any change to the methods below; `_apiMinor` is owned solely here (the data file
+-- never sets it). With a single consumer this never fires.
+local API_MINOR = 1
+if lib._apiMinor and lib._apiMinor >= API_MINOR then return end
+lib._apiMinor = API_MINOR
+
 -- The data source, for integrators that want to credit it.
 lib.source = "the Wizzleworks"
 
