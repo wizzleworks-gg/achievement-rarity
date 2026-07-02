@@ -1,10 +1,11 @@
 -- AchievementRarity-1.0 — an embeddable achievement-rarity data library by the Wizzleworks.
 --
 -- Two layers, cleanly separable; the raw layer never depends on the opinion layer:
---   Raw (the hard contract)  GetRarity / GetCount / GetData / GetMeta — the share of
---                            accounts that hold an achievement, the account counts behind
---                            it, and the snapshot metadata. Region-scoped, zero house
---                            opinion. A consumer can get the % without ever touching bands.
+--   Raw (the hard contract)  GetRarity / GetCount / GetData / GetMeta / RankAtEarn — the
+--                            share of accounts that hold an achievement, the account counts
+--                            behind it, the snapshot metadata, and how early a given earn
+--                            date was. Region-scoped, zero house opinion. A consumer can
+--                            get the % without ever touching bands.
 --   Opinion (optional)       GetTier / GetColor / GetTiers / Format / FormatPct — our tier
 --                            bands, borrowed from WoW's loot-quality palette, plus the
 --                            display format. Exposed (GetTiers) so a consumer that
@@ -14,10 +15,11 @@
 -- The library imposes no fallback — each consumer decides its own (How Rare?, for example,
 -- tints such rows its brand gold; a stranger may prefer to hide them).
 --
--- All getters take an optional `scope`: "region" (the player's home region — the default)
--- or "global". The data file (loaded first) registers the library and installs the numbers;
--- this file attaches the read API. MIT licensed; the rarity numbers are facts compiled by
--- the Wizzleworks. Distribution + methodology:
+-- All getters take an optional `scope`: "region" (the player's home region — the default),
+-- "global", or an explicit region name ("us" / "eu") for consumers that want a specific
+-- column regardless of where the player plays. The data file (loaded first) registers the
+-- library and installs the numbers; this file attaches the read API. MIT licensed; the
+-- rarity numbers are facts compiled by the Wizzleworks. Distribution + methodology:
 -- https://github.com/wizzleworks-gg/achievement-rarity
 
 assert(LibStub, "AchievementRarity-1.0 requires LibStub")
@@ -32,7 +34,7 @@ if not lib then return end -- the data file registers the library; nothing to at
 -- with the newest data AND the newest API, each arbitrated independently. Bump API_MINOR
 -- on any change to the methods below; `_apiMinor` is owned solely here (the data file
 -- never sets it). With a single consumer this never fires.
-local API_MINOR = 1
+local API_MINOR = 2 -- 2: RankAtEarn all-accounts re-base (allPct, earnerPct / nil, reason); explicit-region scopes
 if lib._apiMinor and lib._apiMinor >= API_MINOR then return end
 lib._apiMinor = API_MINOR
 
@@ -47,10 +49,14 @@ local REGION_INDEX = { us = 1, eu = 2, global = 3 }
 local REGION_BY_ID = { [1] = "us", [3] = "eu" }
 lib.region = REGION_BY_ID[GetCurrentRegion()] or "global"
 
--- The data region a scope reads: "global" → global; "region"/default/nil → home region.
+-- The data region a scope reads: "region" (or nil) → the player's home region; an
+-- explicit region name ("us" / "eu" / "global") → itself, so a consumer can ask for
+-- a specific column (e.g. a tooltip showing all three side by side) without touching
+-- the packed count layout. Anything unrecognised falls back to the home region — the
+-- behaviour before explicit regions existed.
 local function scopeRegion(scope)
-    if scope == "global" then
-        return "global"
+    if scope and REGION_INDEX[scope] then
+        return scope
     end
     return lib.region
 end
@@ -107,12 +113,24 @@ end
 
 --[[ Rank-at-earn — raw layer, no house opinion. ]]
 
--- Your standing among an achievement's holders by earn date: "you were in the first N% to
--- earn this". The data file ships, per achievement per scope, a small array of day-offsets
--- (from lib.rankFloor) marking the date by which each lib.rankLadder percentile of current
--- holders had earned it; this interpolates the player's own earn date against them. Reads
--- only the player's recorded earn date, so it's retroactive — it works for achievements
--- earned long before this addon was installed, with no client-side stamp.
+-- How early you earned an achievement, measured against ALL tracked accounts: "you were
+-- in the first N% to earn this", where N is the share of the whole active population
+-- that earned it before you. An account that never earned it cannot have earned it
+-- before you, so non-earners count after every earner and the metric is simply your
+-- position in the earn order over the population — the same denominator as GetRarity,
+-- so the two read consistently side by side (every earner of a 4%-rarity achievement is
+-- somewhere within its "first ~4%"; the earliest are "first <0.1%"). Ranking within
+-- earners only was considered and rejected: it punishes exactly the rare achievements
+-- the metric exists for (a mid-pack earner of a top-4% achievement is still ahead of
+-- the 96% who never earned it at all).
+--
+-- Mechanically: the data file ships, per achievement per scope, a small array of
+-- day-offsets (from lib.rankFloor) marking the date by which each lib.rankLadder
+-- percentile of current earners had earned it; the player's own earn date interpolates
+-- against those to an earner-percentile, which is then scaled by the achievement's
+-- rarity. Reads only the player's recorded earn date, so it's retroactive — it works
+-- for achievements earned long before this addon was installed, with no client-side
+-- stamp.
 
 -- lib.rankFloor parsed to epoch seconds, memoised per-lib. The achievement system's launch
 -- date (patch 3.0.2); the game back-credits old account-wide earns to it, so an earn date
@@ -128,50 +146,70 @@ local function floorTime(self)
     return t or nil
 end
 
--- The player's percentile (0–100) among an achievement's holders by earn date under a scope,
--- or nil when: the achievement is off-snapshot, the scope has no breakpoints (too few holders
--- for a stable curve, or a data file without rank support), or the earn date is at/below the
--- unreliable floor (suppressed). earnTime is the earn date as epoch seconds (os.time-style).
--- Output is continuous — interpolated between the ladder breakpoints — so "first 3%" is
--- meaningful, not just the ladder values. The caller decides display (e.g. "<1%" under 1%).
+-- Your rank-at-earn under a scope, as TWO returns:
+--   1. the share (0–100) of ALL tracked accounts that earned it before you — the headline
+--      metric, denominator-consistent with GetRarity (it can never exceed the rarity);
+--   2. your percentile (0–100) among the achievement's earners only — the raw curve
+--      position, for consumers that want to gate on "was I notably early?" (a late earner
+--      of a rare achievement has a small first return but a large second one, and a line
+--      built from it would only restate the rarity).
+-- On suppression the first return is nil and the SECOND is the reason, so a consumer can
+-- explain a missing rank without reaching into the data tables:
+--   "off-snapshot" — the achievement isn't in this data file;
+--   "no-curve"     — no breakpoints for this scope (too few earners for a stable
+--                    percentile, or a data file without rank support);
+--   "date-floor"   — the earn date is at/below the unreliable rankFloor (the game
+--                    back-credits old account-wide earns there).
+-- earnTime is the earn date as epoch seconds (os.time-style). Output is continuous —
+-- interpolated between the ladder breakpoints — so "first 0.3%" is meaningful, not just
+-- the ladder values. The caller decides display.
 function lib:RankAtEarn(achievementID, earnTime, scope)
+    local rarity = self:GetRarity(achievementID, scope)
+    if not rarity then
+        return nil, "off-snapshot"
+    end
     local entry = self.ranks and self.ranks[achievementID]
     if not entry then
-        return nil
+        return nil, "no-curve"
     end
     local offs = entry[REGION_INDEX[scopeRegion(scope)]]
     if not offs or #offs == 0 then
-        return nil
+        return nil, "no-curve"
     end
     local floor = floorTime(self)
     if not floor then
-        return nil
+        return nil, "no-curve"
     end
     -- Day-offset of the earn date from the floor (rounded; the curve is week-granular, so a
     -- sub-day DST wobble is immaterial). At/below the floor → unreliable date → suppress.
     local days = math.floor((earnTime - floor) / 86400 + 0.5)
     if days <= 0 then
-        return nil
+        return nil, "date-floor"
     end
     local ladder = self.rankLadder
     local n = #offs
+    local earnerPct
     if days <= offs[1] then
-        return ladder[1]              -- earlier than the earliest recorded holder
+        earnerPct = ladder[1]         -- earlier than the earliest recorded earner
     elseif days >= offs[n] then
-        return ladder[n]              -- later than the last recorded holder
-    end
-    for i = 1, n - 1 do
-        local hi = offs[i + 1]
-        if days <= hi then
-            local lo = offs[i]
-            local pLo, pHi = ladder[i], ladder[i + 1]
-            if hi == lo then
-                return pHi             -- a flat step (tied dates); take the higher percentile
+        earnerPct = ladder[n]         -- later than the last recorded earner
+    else
+        for i = 1, n - 1 do
+            local hi = offs[i + 1]
+            if days <= hi then
+                local lo = offs[i]
+                local pLo, pHi = ladder[i], ladder[i + 1]
+                if hi == lo then
+                    earnerPct = pHi   -- a flat step (tied dates); take the higher percentile
+                else
+                    earnerPct = pLo + (pHi - pLo) * (days - lo) / (hi - lo)
+                end
+                break
             end
-            return pLo + (pHi - pLo) * (days - lo) / (hi - lo)
         end
+        earnerPct = earnerPct or ladder[n]
     end
-    return ladder[n]
+    return earnerPct * rarity / 100, earnerPct
 end
 
 --[[ Opinion layer — house style, optional and overridable. ]]

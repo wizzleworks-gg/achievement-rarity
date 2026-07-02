@@ -1,8 +1,9 @@
 # AchievementRarity
 
 **An embeddable World of Warcraft data library, by the [Wizzleworks](https://github.com/wizzleworks-gg).**
-For any achievement, it answers one question: *how rare is it?* — the share of accounts that
-have completed it, across the US and EU regions and globally.
+For any achievement, it answers two questions: *how rare is it?* — the share of accounts that
+have completed it, across the US and EU regions and globally — and *how early was a given earn?*
+— the share of all tracked accounts that had earned it before a given date (rank-at-earn).
 
 It is **just the data** (plus an optional house tier scheme). It has no UI, no slash commands,
 and no saved variables. Addons embed it and build their own surfaces on top; the reference
@@ -69,8 +70,10 @@ default.
 
 ## API
 
-All getters take an optional `scope`: `"region"` (the player's home region — the default) or
-`"global"`. Every getter returns `nil` for an achievement outside the snapshot.
+All getters take an optional `scope`: `"region"` (the player's home region — the default),
+`"global"`, or an explicit region name (`"us"` / `"eu"`) when you want a specific column
+regardless of where the player plays. Every getter returns `nil` for an achievement outside
+the snapshot.
 
 ### Raw — the hard contract
 
@@ -79,7 +82,8 @@ All getters take an optional `scope`: `"region"` (the player's home region — t
 | `AR:GetRarity(id [, scope])` | attainment as a percent, `0`–`100` (e.g. `2.7`) |
 | `AR:GetCount(id [, scope])` | the raw account count behind the percentage (for "one of only N") |
 | `AR:GetData()` | the whole `{ [id] = {us, eu, global} }` count table — for scanning every id (treat read-only) |
-| `AR:GetMeta()` | `{ asOf, accounts = {us, eu, global}, region, minor }` — snapshot date, per-region denominators, the player's home region, and the data version |
+| `AR:GetMeta()` | `{ asOf, accounts = {us, eu, global}, region, minor, rankFloor }` — snapshot date, per-region denominators, the player's home region, the data version, and the rank floor date (nil in a data file without rank support) |
+| `AR:RankAtEarn(id, earnTime [, scope])` | rank-at-earn for an earn at `earnTime` (epoch seconds), as **two returns**: the share (`0`–`100`) of **all** tracked accounts that earned it before then (never exceeds the rarity — same denominator), and the percentile (`0`–`100`) among the achievement's earners only (for gating on "notably early"). On suppression the first return is `nil` and the second is the **reason**: `"off-snapshot"`, `"no-curve"` (too few earners for a stable percentile), or `"date-floor"` (earn date at/below the unreliable floor — see below) |
 
 ### Opinion — house style, optional and overridable
 
@@ -126,6 +130,17 @@ figures reflect the players currently in the game.
 data, and that population leans toward more engaged players. So every figure is best read as
 *among active, trackable players* — which makes a rarity number a **floor** on how rare
 something truly is: the real share can only be lower (rarer), never higher.
+
+**Rank-at-earn — "you were in the first N% to earn this."** Besides *how many* hold an
+achievement, the library ships *when* its earners earned it: per achievement, a small curve of
+dates by which each slice of today's earners had it. Looking up an earn date against that curve
+gives the share of **all** tracked accounts that earned it before then — the same denominator as
+the rarity figure, so the two read consistently side by side (an account that never earned it
+can't have earned it before you). Every earner of a 4%-rarity achievement is somewhere within
+its "first ~4%"; the earliest are "first <0.1%". Two honesty rules: achievements with too few
+tracked earners ship no curve (a percentile would be noise), and earn dates at or before the
+achievement system's launch (14 Oct 2008, `rankFloor`) are suppressed — WoW back-credits old
+account-wide earns to that date, so it can't be trusted.
 
 **Regions.** **US** and **EU** are measured separately, each against its own active population.
 **Global** combines them — today that means US + EU only; other regions (KR, TW) fold into the
