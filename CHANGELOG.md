@@ -23,4 +23,10 @@ data refresh and is what freshest-wins arbitration keys on.
   API instead of indexing the packed count triples.
 - The static API half is freshest-API-wins gated (`_apiMinor`), independently of the data
   snapshot's freshest-data-wins minor.
-- Data snapshot as of 2026-07-01.
+- Junk tier colour lightened (0.5 → 0.75 grey): in-game testing found the darker grey
+  blending into the achievement panel's row background.
+- The data file now **excludes retired achievements** — ones still present in client data
+  but removed from Blizzard's achievement API index (e.g. Giddy Up!). They are
+  unobtainable and hidden from the in-game UI, so their "rarity" measures attrition,
+  not difficulty; surfacing them as brag material misleads.
+- Data snapshot as of 2026-07-10.
