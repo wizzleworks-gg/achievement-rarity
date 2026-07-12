@@ -84,6 +84,9 @@ the snapshot.
 | `AR:GetData()` | the whole `{ [id] = {us, eu, global} }` count table — for scanning every id (treat read-only) |
 | `AR:GetMeta()` | `{ asOf, accounts = {us, eu, global}, region, minor, rankFloor }` — snapshot date, per-region denominators, the player's home region, the data version, and the rank floor date (nil in a data file without rank support) |
 | `AR:RankAtEarn(id, earnTime [, scope])` | rank-at-earn for an earn at `earnTime` (epoch seconds), as **two returns**: the share (`0`–`100`) of **all** tracked accounts that earned it before then (never exceeds the rarity — same denominator), and the percentile (`0`–`100`) among the achievement's earners only (for gating on "notably early"). On suppression the first return is `nil` and the second is the **reason**: `"off-snapshot"`, `"no-curve"` (too few earners for a stable percentile), or `"date-floor"` (earn date at/below the unreliable floor — see below) |
+| `AR:CollectionWeight(id)` | one achievement's contribution to the collection score (its "surprise": −log2 of the global attainment share), or `nil` when there is nothing to weigh — off-snapshot, or zero recorded global holders |
+| `AR:CollectionScore(isEarned)` | a whole-collection score: the summed weight of every snapshot achievement for which the `isEarned(id)` callback returns true (the callback keeps game-API calls out of the library) |
+| `AR:CollectionStanding(score [, scope])` | where that score stands among tracked accounts: the share (`0`–`100`) that scores **below** it — "your achievements are rarer than N%". `nil` in a data file (or scope) without a standing distribution |
 
 ### Opinion — house style, optional and overridable
 
@@ -94,6 +97,7 @@ yourself.
 | Call | Returns |
 |---|---|
 | `AR:GetTier(id [, scope])` | tier name: `"legendary"` / `"epic"` / `"rare"` / `"uncommon"` / `"common"` / `"junk"` |
+| `AR:CollectionTier(score [, scope])` | the tier verdict for a whole collection ("your achievements are **Epic**"), banding `CollectionStanding` through the same scale (top 0.1% of accounts = legendary, top 5% = epic, …); returns tier name, the standing, and the tier's `r, g, b` |
 | `AR:GetColor(id [, scope])` | `r, g, b` (each `0`–`1`) of the tier colour |
 | `AR:GetTiers()` | the bands, rarest first: `{ {name, maxPct, r, g, b}, ... }` — `maxPct` is the % below which the tier applies |
 | `AR:Format(id [, scope])` | formatted string, `"3%"` / `"<1%"` |
@@ -141,6 +145,16 @@ its "first ~4%"; the earliest are "first <0.1%". Two honesty rules: achievements
 tracked earners ship no curve (a percentile would be noise), and earn dates at or before the
 achievement system's launch (14 Oct 2008, `rankFloor`) are suppressed — WoW back-credits old
 account-wide earns to that date, so it can't be trusted.
+
+**Collection standing — "how rare are YOU?"** Beyond single achievements, the library can
+place a player's *whole collection*: every earned achievement contributes points for how
+*surprising* it is to hold (an achievement half of players have is worth ~1 point, a 3% one
+~5, a 0.1% one ~10 — the rule is logarithmic, so rare earns count more but no single
+achievement dominates). The data file ships the distribution of that score across all
+tracked accounts, so a player's recomputed score reads out as "rarer than 96% of accounts".
+Because everyone is scored by the identical rule against the identical snapshot, the
+standing is a pure ranking — and the same active-trackable-players caveat applies, so the
+true standing can only be better than shown.
 
 **Regions.** **US** and **EU** are measured separately, each against its own active population.
 **Global** combines them — today that means US + EU only; other regions (KR, TW) fold into the

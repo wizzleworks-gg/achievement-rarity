@@ -25,6 +25,13 @@ data refresh and is what freshest-wins arbitration keys on.
   snapshot's freshest-data-wins minor.
 - Junk tier colour lightened (0.5 → 0.75 grey): in-game testing found the darker grey
   blending into the achievement panel's row background.
+- **Collection standing** — "how rare are you": the data file ships, per scope, the
+  distribution of a rarity-weighted collection score (each earned achievement contributes
+  its "surprise", −log2 of its global attainment share) across all tracked accounts
+  (`standingLadder` / `standing`), and the API gains `CollectionWeight` /
+  `CollectionScore(isEarned)` / `CollectionStanding(score[, scope])` (raw) plus
+  `CollectionTier` (opinion — bands the standing through the same loot-quality scale:
+  top 5% of accounts = an Epic collection).
 - The data file now **excludes retired achievements** — ones still present in client data
   but removed from Blizzard's achievement API index (e.g. Giddy Up!). They are
   unobtainable and hidden from the in-game UI, so their "rarity" measures attrition,
