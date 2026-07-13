@@ -4,36 +4,28 @@ All notable changes to **AchievementRarity**. The library name's major (`-1.0`) 
 raw API contract; the LibStub *minor* (days since 2020-01-01 of the snapshot) bumps on every
 data refresh and is what freshest-wins arbitration keys on.
 
-## 2026.07.13
+## 2026.07.13 — initial release
 
-- Initial extraction of the rarity data + tier opinion layer out of the **How Rare?** addon
-  into a standalone, embeddable LibStub library (`AchievementRarity-1.0`). How Rare? becomes
-  the reference consumer.
-- Raw contract: `GetRarity` / `GetCount` / `GetData` / `GetMeta`.
-- Opinion layer: `GetTier` / `GetColor` / `GetTiers` / `Format` / `FormatPct`.
-- **Rank-at-earn**: the data file now ships per-achievement earn-date curves (percentile →
-  day-offset breakpoints: `rankLadder` / `rankFloor` / `ranks`), and the API gains
-  `RankAtEarn(id, earnTime[, scope])` — the share of **all** tracked accounts that earned an
-  achievement before a given date (denominator-consistent with `GetRarity`; never exceeds it),
-  plus the earner-only percentile as a second return. On suppression it returns nil plus a
-  reason ("off-snapshot" / "no-curve" / "date-floor"), so consumers can explain a missing
-  rank without touching the data tables.
-- Scopes accept explicit region names ("us" / "eu" / "global") besides "region"/"global",
-  so a consumer can read a specific column (e.g. a three-region detail line) through the
-  API instead of indexing the packed count triples.
-- The static API half is freshest-API-wins gated (`_apiMinor`), independently of the data
-  snapshot's freshest-data-wins minor.
-- Junk tier colour lightened (0.5 → 0.75 grey): in-game testing found the darker grey
-  blending into the achievement panel's row background.
-- **Collection standing** — "how rare are you": the data file ships, per scope, the
-  distribution of a rarity-weighted collection score (each earned achievement contributes
-  its "surprise", −log2 of its global attainment share) across all tracked accounts
-  (`standingLadder` / `standing`), and the API gains `CollectionWeight` /
-  `CollectionScore(isEarned)` / `CollectionStanding(score[, scope])` (raw) plus
-  `CollectionTier` (opinion — bands the standing through the same loot-quality scale:
-  top 5% of accounts = an Epic collection).
-- The data file now **excludes retired achievements** — ones still present in client data
-  but removed from Blizzard's achievement API index (e.g. Giddy Up!). They are
-  unobtainable and hidden from the in-game UI, so their "rarity" measures attrition,
-  not difficulty; surfacing them as brag material misleads.
-- Data snapshot as of 2026-07-13.
+The Wizzleworks' achievement rarity data library, now installable standalone. Data
+snapshot as of **2026-07-13**, built from 830,000+ tracked accounts across US and EU.
+
+Ships with:
+
+- **Rarity** — the share of accounts holding each achievement (US / EU / global),
+  for 8,349 achievements.
+- **Rank-at-earn** — per-achievement earn-date curves: *"you were in the first N% to
+  earn this"*, retroactive for achievements earned years ago.
+- **Collection standing** — a rarity-weighted score for a whole collection, read out
+  against all tracked accounts: *"your achievements are rarer than N% of accounts"*.
+- **Tier opinion layer** — loot-quality bands (legendary < 0.1%, epic < 5%, rare < 15%,
+  uncommon < 40%, common < 70%) with colours and formatters; consumers can use them
+  as-is or band the raw numbers their own way.
+- **Freshest-wins** — LibStub-versioned by snapshot date, so this standalone copy
+  transparently upgrades any addon that embeds the library; no configuration.
+
+Data honesty, baked in: only accounts active in the last 30 days count and every figure
+is a floor; achievements with too few tracked earners ship no rank curve; unreliably old
+earn dates are suppressed; retired achievements are excluded.
+
+MIT licensed — full API and methodology at
+[github.com/wizzleworks-gg/achievement-rarity](https://github.com/wizzleworks-gg/achievement-rarity).
