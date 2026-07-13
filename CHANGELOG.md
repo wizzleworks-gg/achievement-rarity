@@ -4,7 +4,7 @@ All notable changes to **AchievementRarity**. The library name's major (`-1.0`) 
 raw API contract; the LibStub *minor* (days since 2020-01-01 of the snapshot) bumps on every
 data refresh and is what freshest-wins arbitration keys on.
 
-## Unreleased
+## 2026.07.13
 
 - Initial extraction of the rarity data + tier opinion layer out of the **How Rare?** addon
   into a standalone, embeddable LibStub library (`AchievementRarity-1.0`). How Rare? becomes
@@ -36,4 +36,4 @@ data refresh and is what freshest-wins arbitration keys on.
   but removed from Blizzard's achievement API index (e.g. Giddy Up!). They are
   unobtainable and hidden from the in-game UI, so their "rarity" measures attrition,
   not difficulty; surfacing them as brag material misleads.
-- Data snapshot as of 2026-07-10.
+- Data snapshot as of 2026-07-13.
