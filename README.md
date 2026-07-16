@@ -83,7 +83,7 @@ the snapshot.
 | `AR:GetCount(id [, scope])` | the raw account count behind the percentage (for "one of only N") |
 | `AR:GetData()` | the whole `{ [id] = {us, eu, global} }` count table — for scanning every id (treat read-only) |
 | `AR:GetMeta()` | `{ asOf, accounts = {us, eu, global}, region, minor, rankFloor }` — snapshot date, per-region denominators, the player's home region, the data version, and the rank floor date (nil in a data file without rank support) |
-| `AR:RankAtEarn(id, earnTime [, scope])` | rank-at-earn for an earn at `earnTime` (epoch seconds), as **two returns**: the share (`0`–`100`) of **all** tracked accounts that earned it before then (never exceeds the rarity — same denominator), and the percentile (`0`–`100`) among the achievement's earners only (for gating on "notably early"). On suppression the first return is `nil` and the second is the **reason**: `"off-snapshot"`, `"no-curve"` (too few earners for a stable percentile), or `"date-floor"` (earn date at/below the unreliable floor — see below) |
+| `AR:RankAtEarn(id, earnTime [, scope])` | rank-at-earn for an earn at `earnTime` (epoch seconds), as **two returns**: the share (`0`–`100`) of **all** tracked accounts that earned it before then (never exceeds the rarity — same denominator), and the percentile (`0`–`100`) among the achievement's earners only (for gating on "notably early"). On suppression the first return is `nil` and the second is the **reason**: `"off-snapshot"`, `"no-curve"` (too few earners for a stable percentile), or `"date-floor"` (earn date at/below `rankFloor` — an impossible date; see below) |
 | `AR:CollectionWeight(id)` | one achievement's contribution to the collection score (its "surprise": −log2 of the global attainment share), or `nil` when there is nothing to weigh — off-snapshot, or zero recorded global holders |
 | `AR:CollectionScore(isEarned)` | a whole-collection score: the summed weight of every snapshot achievement for which the `isEarned(id)` callback returns true (the callback keeps game-API calls out of the library) |
 | `AR:CollectionStanding(score [, scope])` | where that score stands among tracked accounts: the share (`0`–`100`) that scores **below** it — "your achievements are rarer than N%". `nil` in a data file (or scope) without a standing distribution |
@@ -142,9 +142,13 @@ gives the share of **all** tracked accounts that earned it before then — the s
 the rarity figure, so the two read consistently side by side (an account that never earned it
 can't have earned it before you). Every earner of a 4%-rarity achievement is somewhere within
 its "first ~4%"; the earliest are "first <0.1%". Two honesty rules: achievements with too few
-tracked earners ship no curve (a percentile would be noise), and earn dates at or before the
-achievement system's launch (14 Oct 2008, `rankFloor`) are suppressed — WoW back-credits old
-account-wide earns to that date, so it can't be trusted.
+tracked earners ship no curve (a percentile would be noise), and impossible earn dates — at or
+before WoW's launch (23 Nov 2004, `rankFloor`), before the game existed to record anything —
+are suppressed. Back-credited dates are kept: the game credits many pre-achievement-system
+earns to the system's 2008 launch day, and an earn dated there ranks at the back of that day's
+pile-up, never ahead of the players it is actually tied with. (The floor sits at game launch
+rather than 2008 because a small number of genuine earns carry timestamps from before the
+achievement system existed.)
 
 **Collection standing — "how rare are YOU?"** Beyond single achievements, the library can
 place a player's *whole collection*: every earned achievement contributes points for how
