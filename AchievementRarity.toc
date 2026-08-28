@@ -1,4 +1,4 @@
-## Interface: 120005, 120007, 120100
+## Interface: 120007, 120100
 ## Title: AchievementRarity
 ## Notes: Achievement rarity data by the Wizzleworks — an embeddable LibStub library: the share of accounts that hold each achievement (US / EU / global), plus optional house tier bands. Install alongside a consumer addon to keep its rarity data fresh.
 ## Author: the Wizzleworks
